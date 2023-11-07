@@ -3,6 +3,8 @@ const app = express();
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const port = process.env.PORT || 5000;
 
 //middleware
@@ -10,6 +12,7 @@ const corsConfig = {
   credentials: true,
   origin: true,
 };
+app.use(cookieParser());
 app.use(cors(corsConfig));
 app.use(express.json());
 
@@ -46,6 +49,45 @@ const categoriesCollection = client.db("booksDB").collection("categories");
 const booksCollection = client.db("booksDB").collection("books");
 const borrowCollection = client.db("booksDB").collection("borrows");
 
+// jwt authentication middleware
+
+const verify = async (req, res, next) => {
+  //Coockies ache kina check koro
+  const token = req.cookies?.token;
+  if (!token) {
+    res.status(401).send({ status: "unAuthorized Access", code: "401" });
+    return;
+  }
+
+  jwt.verify(token, process.env.SECRET_KEY, (error, decode) => {
+    if (error) {
+      res.status(401).send({ status: "unAuthorized Access", code: "401" });
+    } else {
+      // console.log(decode);
+      req.decode = decode;
+    }
+  });
+  next();
+};
+
+
+// jwt token create request
+app.post("/api/v1/jwt", async (req, res) => {
+  const body = req.body;
+  console.log(body);
+  //generating Token
+  const token = jwt.sign(body, process.env.SECRET_KEY, { expiresIn: "10h" });
+  console.log(token);
+  // sending Token in cookies with a status
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+  })
+  .send({ status: "true" });
+  // res.send({ body, token });
+});
+
 //get all categories
 
 app.get("/api/v1/categories", async (req, res) => {
@@ -74,16 +116,15 @@ app.get("/api/v1/single-book/:id", async (req, res) => {
 });
 
 // get all book
-app.get("/api/v1/books", async (req, res) => {
+app.get("/api/v1/books",verify, async (req, res) => {
   const result = await booksCollection.find().toArray();
   res.send(result);
 });
 
 // add book
-app.post("/api/v1/books", async (req, res) => {
-  const { email } = req.query;
+app.post("/api/v1/books", verify,async (req, res) => {
   const book = req.body;
-  const result = await booksCollection.find();
+  const result = await booksCollection.insertOne(book);
   res.send(result);
 });
 
@@ -122,25 +163,28 @@ app.put("/api/v1/books/:id", async (req, res) => {
 });
 
 // patch incrage and decrage
-app.patch("/api/v1/books-quantity-decrease", async (req, res) => {
-  const { id, quantity } = req.query;
+app.patch("/api/v1/books-quantity-decrease/:id", async (req, res) => {
+  const { id } = req.params;
   const filter = { _id: new ObjectId(id) };
+  const find = await booksCollection.findOne(filter);
   const updateDoc = {
     $set: {
-      quantity: quantity - 1,
+      quantity: find.quantity - 1,
     },
   };
-
   const options = { upsert: false };
   const result = await booksCollection.updateOne(filter, updateDoc, options);
   res.send(result);
 });
-app.patch("/api/v1/books-quantity-increase", async (req, res) => {
-  const { id, quantity } = req.query;
+
+// incrage book quantity
+app.patch("/api/v1/books-quantity-increase/:id", async (req, res) => {
+  const { id } = req.params;
   const filter = { _id: new ObjectId(id) };
+  const find = await booksCollection.findOne(filter);
   const updateDoc = {
     $set: {
-      quantity: quantity + 1,
+      quantity: find.quantity + 1,
     },
   };
 
