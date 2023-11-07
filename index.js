@@ -9,12 +9,12 @@ const port = process.env.PORT || 5000;
 
 //middleware
 const corsConfig = {
+  origin: ["http://localhost:5173", "https://sevi-efc34.web.app"],
   credentials: true,
-  origin: true,
 };
-app.use(cookieParser());
 app.use(cors(corsConfig));
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
@@ -74,18 +74,21 @@ const verify = async (req, res, next) => {
 // jwt token create request
 app.post("/api/v1/jwt", async (req, res) => {
   const body = req.body;
-  console.log(body);
+  // console.log(body);
   //generating Token
   const token = jwt.sign(body, process.env.SECRET_KEY, { expiresIn: "10h" });
-  console.log(token);
+  // console.log(token);
   // sending Token in cookies with a status
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-  })
-  .send({ status: "true" });
-  // res.send({ body, token });
+  res
+    .cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    })
+    .send({ success: true });
+
+ 
+
 });
 
 //get all categories
