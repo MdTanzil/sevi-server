@@ -26,7 +26,7 @@ Prerequisites: Node.js 20+ and npm, plus a MongoDB Atlas cluster.
 
 ```bash
 npm install
-node index.js   # listens on PORT (default 5000)
+npm start   # listens on PORT (default 5000)
 ```
 
 ### Environment variables
@@ -44,6 +44,32 @@ Create a `.env` file in the project root:
 The server connects to the `booksDB` database (collections: `categories`,
 `books`, `borrows`). CORS allows `http://localhost:5173` and
 `https://sevi-efc34.web.app` with credentials.
+
+## Project structure
+
+```
+├── index.js                  # Entry point: connects the DB, starts the server
+├── vercel.json               # Vercel deployment config
+├── .env.example              # Documented environment variables
+└── src/
+    ├── app.js                # Express app: middleware + route mounting (no listen)
+    ├── config/
+    │   └── db.js             # MongoClient setup, dbConnect(), collections
+    ├── routes/               # One router per resource, mounted under /api/v1
+    │   ├── auth.routes.js
+    │   ├── books.routes.js
+    │   ├── borrows.routes.js
+    │   └── categories.routes.js
+    ├── controllers/          # Route handlers (one file per resource)
+    │   ├── auth.controller.js
+    │   ├── books.controller.js
+    │   ├── borrows.controller.js
+    │   └── categories.controller.js
+    ├── middlewares/
+    │   └── verifyToken.js    # JWT cookie verification
+    └── utils/
+        └── normalizeBook.js  # Book metadata normalization before saving
+```
 
 ## API Reference
 
