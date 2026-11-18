@@ -24,6 +24,7 @@ const dbConnect = async () => {
 const categoriesCollection = client.db("booksDB").collection("categories");
 const booksCollection = client.db("booksDB").collection("books");
 const borrowCollection = client.db("booksDB").collection("borrows");
+const usersCollection = client.db("booksDB").collection("users");
 
 module.exports = {
   client,
@@ -31,4 +32,5 @@ module.exports = {
   categoriesCollection,
   booksCollection,
   borrowCollection,
+  usersCollection,
 };

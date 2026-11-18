@@ -10,9 +10,11 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 
 - Book catalogue: list all books, filter by category, single-book lookup
 - Add and update books, including optional metadata (ISBN, publisher,
-  published year, language, pages)
-- Borrowing: record borrows, list a user's borrowed books, return books
-  (quantity tracking)
+  published year, language, pages) — librarians and admins only
+- Borrowing: record borrows (max 3 active borrows per user), list a user's
+  borrowed books, return books with a kept borrow history (quantity tracking)
+- User profiles with roles (member, librarian, admin); admins manage users
+  and their roles
 - JWT authentication: token issued on login, stored in an httpOnly cookie
 
 ## Tech stack
@@ -38,12 +40,28 @@ Create a `.env` file in the project root:
 | `USER` | MongoDB Atlas database username |
 | `PASSWORD` | MongoDB Atlas database password |
 | `SECRET_KEY` | Secret used to sign JWTs |
+| `ADMIN_EMAILS` | Comma-separated emails that become admins automatically on first login (e.g. `owner@example.com,admin@example.com`) |
 | `PORT` | Port to listen on (default `5000`) |
 | `NODE_ENV` | Set to `production` for secure, cross-site auth cookies |
 
 The server connects to the `booksDB` database (collections: `categories`,
-`books`, `borrows`). CORS allows `http://localhost:5173` and
+`books`, `borrows`, `users`). CORS allows `http://localhost:5173` and
 `https://sevi-efc34.web.app` with credentials.
+
+## Roles & permissions
+
+Every logged-in user has a profile (auto-created on first access) with one
+of three roles. The default role is `member`; emails listed in
+`ADMIN_EMAILS` become `admin` automatically. Admins assign the `librarian`
+role from the client.
+
+| Action | Member | Librarian | Admin |
+| --- | --- | --- | --- |
+| Browse books, borrow & return (max 3 at a time), view own history | ✅ | ✅ | ✅ |
+| Edit own profile (name, phone, address, email) | ✅ | ✅ | ✅ |
+| Add & update books | ❌ | ✅ | ✅ |
+| List users & change roles | ❌ | ❌ | ✅ |
+| Delete borrow records | ❌ | ❌ | ✅ |
 
 ## Project structure
 
@@ -59,16 +77,20 @@ The server connects to the `booksDB` database (collections: `categories`,
     │   ├── auth.routes.js
     │   ├── books.routes.js
     │   ├── borrows.routes.js
-    │   └── categories.routes.js
+    │   ├── categories.routes.js
+    │   └── users.routes.js
     ├── controllers/          # Route handlers (one file per resource)
     │   ├── auth.controller.js
     │   ├── books.controller.js
     │   ├── borrows.controller.js
-    │   └── categories.controller.js
+    │   ├── categories.controller.js
+    │   └── users.controller.js
     ├── middlewares/
-    │   └── verifyToken.js    # JWT cookie verification
+    │   ├── verifyToken.js    # JWT cookie verification
+    │   └── requireRole.js    # Role gate (reads the caller's users profile)
     └── utils/
         ├── normalizeBook.js  # Book metadata normalization before saving
+        ├── roles.js          # Role constants + ADMIN_EMAILS handling
         └── tokenEmail.js     # Extract the user's email from a decoded JWT
 ```
 
@@ -122,7 +144,7 @@ Clears the `token` cookie. Responds with `{ "success": true }`.
   GET /api/v1/books
 ```
 
-#### Add a book 🔒
+#### Add a book 🔒 (librarian or admin)
 
 ```http
   POST /api/v1/books
@@ -168,7 +190,7 @@ as strings). The optional metadata fields (`isbn`, `publisher`,
 and empty values are dropped, `publishedYear` and `pages` are stored as
 numbers.
 
-#### Update a book 🔒
+#### Update a book 🔒 (librarian or admin)
 
 ```http
   PUT /api/v1/books/:id
@@ -196,6 +218,8 @@ updated (optional metadata fields are normalized the same way).
 ```
 
 The borrower's email is taken from the JWT, not from the request body.
+Each user may have at most 3 active borrows; a fourth borrow returns
+`400 { "error": "Borrow limit reached (3 books)" }`.
 
 #### Get borrowed books 🔒
 
@@ -203,23 +227,93 @@ The borrower's email is taken from the JWT, not from the request body.
   GET /api/v1/borrows
 ```
 
-Returns only the token owner's borrowed books (the email is derived from
-the JWT; no `?email=` query parameter is needed or used).
+Returns only the token owner's ACTIVE borrowed books (returned books are
+excluded; the email is derived from the JWT; no `?email=` query parameter
+is needed or used).
 
-#### Delete a borrowed book 🔒
+#### Get borrow history 🔒
+
+```http
+  GET /api/v1/borrows/history
+```
+
+Returns all of the token owner's borrows (borrowed and returned), newest
+first. Each record has `status` (`borrowed` or `returned`) and, once
+returned, `returnedDate`.
+
+#### Return a borrowed book 🔒
+
+```http
+  PATCH /api/v1/borrows/:id/return
+```
+
+Marks the borrow as returned (sets `status` to `returned` and
+`returnedDate` to today) — the record is kept for the borrow history.
+Returns `403` for a borrow that belongs to another user, `404` when the
+record does not exist, and `400` when it was already returned.
+
+#### Delete a borrowed book 🔒 (admin only)
 
 ```http
   DELETE /api/v1/borrows/:id
 ```
 
-Only the owner of the borrow record can delete it: returns `403` for a
-borrow that belongs to another user, `404` when the record does not exist.
+Deletes a borrow record (cleanup use — returns use the PATCH endpoint
+above). Returns `404` when the record does not exist.
+
+#### Get my profile 🔒
+
+```http
+  GET /api/v1/profile
+```
+
+Returns the caller's profile (`email`, `name`, `phone`, `address`, `role`,
+`createdAt`). The profile is auto-created on first access (role `admin`
+for emails listed in `ADMIN_EMAILS`, otherwise `member`).
+
+#### Update my profile 🔒
+
+```http
+  PUT /api/v1/profile
+```
+
+Updates the caller's own `name`, `phone` and `address`. Role and email
+cannot be changed through this endpoint.
+
+#### Change my email 🔒
+
+```http
+  PUT /api/v1/profile/email
+```
+
+Body: `{ "newEmail": "..." }`. Migrates the caller's profile and all their
+borrows to the new email. Requires a valid JWT for the old email; the
+client calls this only after Firebase confirms the email change. Returns
+`409` when another profile already uses the new email.
+
+#### List users 🔒 (admin only)
+
+```http
+  GET /api/v1/users
+```
+
+Returns all users (`email`, `name`, `role`, `createdAt`).
+
+#### Change a user's role 🔒 (admin only)
+
+```http
+  PUT /api/v1/users/:email/role
+```
+
+Body: `{ "role": "member" | "librarian" | "admin" }`. An admin cannot
+change their own role (prevents lockout). Returns `404` when the user does
+not exist.
 
 ## Deployment
 
 Deployed on Vercel — `vercel.json` routes all requests to `index.js` via
-`@vercel/node`. The environment variables (`USER`, `PASSWORD`, `SECRET_KEY`)
-are set in the Vercel project settings.
+`@vercel/node`. The environment variables (`USER`, `PASSWORD`, `SECRET_KEY`,
+`ADMIN_EMAILS`) are set in the Vercel project settings.
 
 ## Authors
 

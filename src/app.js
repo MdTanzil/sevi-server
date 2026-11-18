@@ -5,6 +5,7 @@ const authRoutes = require("./routes/auth.routes");
 const booksRoutes = require("./routes/books.routes");
 const borrowsRoutes = require("./routes/borrows.routes");
 const categoriesRoutes = require("./routes/categories.routes");
+const usersRoutes = require("./routes/users.routes");
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.use("/api/v1", authRoutes);
 app.use("/api/v1", booksRoutes);
 app.use("/api/v1", borrowsRoutes);
 app.use("/api/v1", categoriesRoutes);
+app.use("/api/v1", usersRoutes);
 
 module.exports = app;
