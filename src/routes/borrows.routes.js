@@ -1,4 +1,5 @@
 const express = require("express");
+const verifyToken = require("../middlewares/verifyToken");
 const {
   addBorrow,
   getBorrows,
@@ -7,8 +8,8 @@ const {
 
 const router = express.Router();
 
-router.post("/borrow", addBorrow);
-router.get("/borrows", getBorrows);
-router.delete("/borrows/:id", deleteBorrow);
+router.post("/borrow", verifyToken, addBorrow);
+router.get("/borrows", verifyToken, getBorrows);
+router.delete("/borrows/:id", verifyToken, deleteBorrow);
 
 module.exports = router;

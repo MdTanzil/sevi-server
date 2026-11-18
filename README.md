@@ -68,7 +68,8 @@ The server connects to the `booksDB` database (collections: `categories`,
     ├── middlewares/
     │   └── verifyToken.js    # JWT cookie verification
     └── utils/
-        └── normalizeBook.js  # Book metadata normalization before saving
+        ├── normalizeBook.js  # Book metadata normalization before saving
+        └── tokenEmail.js     # Extract the user's email from a decoded JWT
 ```
 
 ## API Reference
@@ -88,6 +89,14 @@ Endpoints marked 🔒 require the JWT cookie issued by `POST /jwt`.
 Body: the user object to embed in the token (e.g. `{ "email": "..." }`).
 Responds with `{ "success": true }` and sets an httpOnly `token` cookie
 (10h expiry).
+
+#### Clear the auth cookie (logout)
+
+```http
+  POST /api/v1/logout
+```
+
+Clears the `token` cookie. Responds with `{ "success": true }`.
 
 #### Get all categories
 
@@ -159,7 +168,7 @@ as strings). The optional metadata fields (`isbn`, `publisher`,
 and empty values are dropped, `publishedYear` and `pages` are stored as
 numbers.
 
-#### Update a book
+#### Update a book 🔒
 
 ```http
   PUT /api/v1/books/:id
@@ -168,35 +177,43 @@ numbers.
 Request body — the same book object as POST above; the fields sent are
 updated (optional metadata fields are normalized the same way).
 
-#### Decrease book quantity
+#### Decrease book quantity 🔒
 
 ```http
   PATCH /api/v1/books-quantity-decrease/:id
 ```
 
-#### Increase book quantity
+#### Increase book quantity 🔒
 
 ```http
   PATCH /api/v1/books-quantity-increase/:id
 ```
 
-#### Add a borrowed book
+#### Add a borrowed book 🔒
 
 ```http
   POST /api/v1/borrow
 ```
 
-#### Get borrowed books
+The borrower's email is taken from the JWT, not from the request body.
+
+#### Get borrowed books 🔒
 
 ```http
-  GET /api/v1/borrows?email=user@example.com
+  GET /api/v1/borrows
 ```
 
-#### Delete a borrowed book
+Returns only the token owner's borrowed books (the email is derived from
+the JWT; no `?email=` query parameter is needed or used).
+
+#### Delete a borrowed book 🔒
 
 ```http
   DELETE /api/v1/borrows/:id
 ```
+
+Only the owner of the borrow record can delete it: returns `403` for a
+borrow that belongs to another user, `404` when the record does not exist.
 
 ## Deployment
 

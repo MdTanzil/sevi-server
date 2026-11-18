@@ -17,4 +17,16 @@ const createToken = async (req, res) => {
     .send({ success: true });
 };
 
-module.exports = { createToken };
+// jwt token clear request (logout). The cookie options must match the ones
+// used when the cookie was set, otherwise the browser will not clear it.
+const logout = async (req, res) => {
+  res
+    .clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    })
+    .send({ success: true });
+};
+
+module.exports = { createToken, logout };
