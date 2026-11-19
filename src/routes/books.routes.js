@@ -7,6 +7,7 @@ const {
   getAllBooks,
   addBook,
   updateBook,
+  deleteBook,
   decreaseBookQuantity,
   increaseBookQuantity,
 } = require("../controllers/books.controller");
@@ -22,6 +23,12 @@ router.put(
   verifyToken,
   requireRole("librarian", "admin"),
   updateBook
+);
+router.delete(
+  "/books/:id",
+  verifyToken,
+  requireRole("librarian", "admin"),
+  deleteBook
 );
 router.patch("/books-quantity-decrease/:id", verifyToken, decreaseBookQuantity);
 router.patch("/books-quantity-increase/:id", verifyToken, increaseBookQuantity);

@@ -11,6 +11,9 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - Book catalogue: list all books, filter by category, single-book lookup
 - Add and update books, including optional metadata (ISBN, publisher,
   published year, language, pages) — librarians and admins only
+- Delete books — librarians and admins only; refused while a book has an
+  active borrow, and the book's wishlist entries and notifications are
+  removed with it
 - Borrowing: record borrows (max 3 active borrows per user, return date
   within 5 days), list a user's borrowed books, return books with a kept
   borrow history (quantity tracking). Out-of-stock books cannot be
@@ -74,6 +77,7 @@ role from the client.
 | Wishlist (add/view/remove) and restock notifications | ✅ | ✅ | ✅ |
 | Edit own profile (name, phone, address, email) | ✅ | ✅ | ✅ |
 | Add & update books | ❌ | ✅ | ✅ |
+| Delete books (blocked while a book is borrowed) | ❌ | ✅ | ✅ |
 | View dashboard stats & all active borrows | ❌ | ✅ | ✅ |
 | Update category images | ❌ | ✅ | ✅ |
 | List users & change roles | ❌ | ❌ | ✅ |
@@ -221,6 +225,21 @@ numbers.
 
 Request body — the same book object as POST above; the fields sent are
 updated (optional metadata fields are normalized the same way).
+
+#### Delete a book 🔒 (librarian or admin)
+
+```http
+  DELETE /api/v1/books/:id
+```
+
+Deletes the book. Returns `404` when the book does not exist and `400`
+for a malformed id. The delete is refused with `409` while the book has
+an active borrow (borrows without a `status` count as borrowed) — the
+response carries a clear message naming the book. When a book is
+deleted, its wishlist entries and notifications are removed with it, so
+no orphaned references remain. A successful delete responds with
+`{ "deleted": true, "bookId": "...", "wishlistsRemoved": 0,
+"notificationsRemoved": 0 }`.
 
 #### Decrease book quantity 🔒
 

@@ -28,8 +28,8 @@ const parseBookId = (value, res) => {
 // GET /wishlist — the token owner's wishlist, newest first. Each entry
 // carries the book's current details (title, author, cover, category,
 // quantity, rating) so the client needs no extra lookups. Entries whose
-// book no longer exists are left out (books are never deleted, so this
-// only guards against stale data).
+// book no longer exists are left out (deleting a book removes its
+// wishlist entries, so this only guards against stale data).
 const getWishlist = async (req, res) => {
   try {
     const email = getOwnerEmail(req, res);

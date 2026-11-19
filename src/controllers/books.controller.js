@@ -1,5 +1,10 @@
 const { ObjectId } = require("mongodb");
-const { booksCollection } = require("../config/db");
+const {
+  booksCollection,
+  borrowCollection,
+  wishlistCollection,
+  notificationsCollection,
+} = require("../config/db");
 const normalizeBook = require("../utils/normalizeBook");
 const { quantityOf, notifyRestock } = require("../utils/restock");
 
@@ -60,6 +65,57 @@ const updateBook = async (req, res) => {
   res.send(result);
 };
 
+// delete a book (librarian/admin only). Refused with 409 while the book
+// has an active borrow — borrows without a status predate the status
+// feature and count as borrowed (same $ne convention as the borrow
+// queries). Wishlist entries and notifications referencing the book are
+// removed with it, so no orphaned references remain. Borrow records
+// store bookId as a string, wishlist and notification records as an
+// ObjectId, so all three lookups match both forms.
+const deleteBook = async (req, res) => {
+  try {
+    const bookId = req.params.id;
+    let objectId;
+    try {
+      objectId = new ObjectId(bookId);
+    } catch {
+      res.status(400).send({ error: "A valid book id is required." });
+      return;
+    }
+    const book = await booksCollection.findOne({ _id: objectId });
+    if (!book) {
+      res.status(404).send({ status: "Not Found", code: "404" });
+      return;
+    }
+    const idForms = [bookId, objectId];
+    const activeBorrow = await borrowCollection.findOne({
+      bookId: { $in: idForms },
+      status: { $ne: "returned" },
+    });
+    if (activeBorrow) {
+      res.status(409).send({
+        error: `Cannot delete "${book.name}" — it is currently borrowed.`,
+      });
+      return;
+    }
+    await booksCollection.deleteOne({ _id: objectId });
+    const wishlists = await wishlistCollection.deleteMany({
+      bookId: { $in: idForms },
+    });
+    const notifications = await notificationsCollection.deleteMany({
+      bookId: { $in: idForms },
+    });
+    res.send({
+      deleted: true,
+      bookId,
+      wishlistsRemoved: wishlists.deletedCount,
+      notificationsRemoved: notifications.deletedCount,
+    });
+  } catch (error) {
+    res.status(500).send({ error: "Could not delete the book" });
+  }
+};
+
 // patch incrage and decrage
 const decreaseBookQuantity = async (req, res) => {
   const { id } = req.params;
@@ -102,6 +158,7 @@ module.exports = {
   getAllBooks,
   addBook,
   updateBook,
+  deleteBook,
   decreaseBookQuantity,
   increaseBookQuantity,
 };
