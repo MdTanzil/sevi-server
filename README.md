@@ -17,8 +17,8 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - User profiles with roles (member, librarian, admin); admins manage users
   and their roles
 - Dashboard data for librarians and admins: library-wide stats (books,
-  copies, users, borrows, overdue, out of stock) and a list of all active
-  borrows across users
+  copies, users, borrows, overdue, out of stock), a list of all active
+  borrows across users, and category image updates
 - JWT authentication: token issued on login, stored in an httpOnly cookie
 
 ## Tech stack
@@ -65,6 +65,7 @@ role from the client.
 | Edit own profile (name, phone, address, email) | ✅ | ✅ | ✅ |
 | Add & update books | ❌ | ✅ | ✅ |
 | View dashboard stats & all active borrows | ❌ | ✅ | ✅ |
+| Update category images | ❌ | ✅ | ✅ |
 | List users & change roles | ❌ | ❌ | ✅ |
 | Delete borrow records | ❌ | ❌ | ✅ |
 
@@ -355,6 +356,18 @@ counts active borrows whose return date is in the past;
 Returns every user's active borrows (returned books excluded), most recent
 first. Each record carries the book title (`bookName`), the borrower's
 email, `borrowedDate`, `retunDate` and `status`.
+
+#### Update a category image 🔒 (librarian or admin)
+
+```http
+  PATCH /api/v1/admin/categories/:id
+```
+
+Body: `{ "image": "https://..." }`. Updates ONLY the category's `image`
+field — the value must be a non-empty `https` URL, otherwise the request
+returns `400`. Renaming a category is not supported: book records reference
+the category name, so a rename would break them. Returns `404` when the
+category does not exist.
 
 ## Deployment
 

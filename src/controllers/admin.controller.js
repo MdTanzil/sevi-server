@@ -1,3 +1,4 @@
+const { ObjectId } = require("mongodb");
 const db = require("../config/db");
 
 // Admin dashboard aggregates (librarian/admin only — see admin.routes.js).
@@ -62,4 +63,45 @@ const getAdminBorrows = async (req, res) => {
   }
 };
 
-module.exports = { getAdminStats, getAdminBorrows };
+// PATCH /admin/categories/:id — update ONLY the image of a category.
+// Renaming is deliberately not allowed: book records reference the
+// category name, so a rename would break them.
+const updateCategoryImage = async (req, res) => {
+  try {
+    const image = req.body?.image;
+    let url = null;
+    if (typeof image === "string" && image.trim() !== "") {
+      try {
+        url = new URL(image.trim());
+      } catch {
+        url = null;
+      }
+    }
+    if (!url || url.protocol !== "https:") {
+      res
+        .status(400)
+        .send({ error: "A valid https image URL is required." });
+      return;
+    }
+    let query;
+    try {
+      query = { _id: new ObjectId(req.params.id) };
+    } catch {
+      res.status(404).send({ status: "Not Found", code: "404" });
+      return;
+    }
+    const record = await db.categoriesCollection.findOne(query);
+    if (!record) {
+      res.status(404).send({ status: "Not Found", code: "404" });
+      return;
+    }
+    const result = await db.categoriesCollection.updateOne(query, {
+      $set: { image: image.trim() },
+    });
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: "Could not update the category image" });
+  }
+};
+
+module.exports = { getAdminStats, getAdminBorrows, updateCategoryImage };

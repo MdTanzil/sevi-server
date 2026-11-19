@@ -4,6 +4,7 @@ const requireRole = require("../middlewares/requireRole");
 const {
   getAdminStats,
   getAdminBorrows,
+  updateCategoryImage,
 } = require("../controllers/admin.controller");
 
 const router = express.Router();
@@ -20,6 +21,14 @@ router.get(
   verifyToken,
   requireRole("librarian", "admin"),
   getAdminBorrows
+);
+// Category images only — renaming a category would break the books that
+// reference it by name, so no name change is offered.
+router.patch(
+  "/admin/categories/:id",
+  verifyToken,
+  requireRole("librarian", "admin"),
+  updateCategoryImage
 );
 
 module.exports = router;
