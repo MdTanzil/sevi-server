@@ -15,7 +15,14 @@ const RETURN_DATE_GRACE_DAYS = 1;
 // Validate a YYYY-MM-DD return date against today (UTC midnight — the
 // server cannot know the borrower's timezone, so the grace day covers
 // the difference). Returns an error message string, or null when valid.
-const validateReturnDate = (value, today = new Date()) => {
+// `maxDays`/`graceDays` default to the member borrow rule; the admin
+// return-date override passes its own window (30 days, no grace).
+const validateReturnDate = (
+  value,
+  today = new Date(),
+  maxDays = MAX_BORROW_DAYS,
+  graceDays = RETURN_DATE_GRACE_DAYS
+) => {
   if (typeof value !== "string" || value.trim() === "") {
     return "A return date is required.";
   }
@@ -42,11 +49,11 @@ const validateReturnDate = (value, today = new Date()) => {
     today.getUTCDate()
   );
   const days = Math.round((due - start) / 86400000);
-  if (days < -RETURN_DATE_GRACE_DAYS) {
+  if (days < -graceDays) {
     return "The return date cannot be in the past.";
   }
-  if (days > MAX_BORROW_DAYS + RETURN_DATE_GRACE_DAYS) {
-    return `Books can be borrowed for up to ${MAX_BORROW_DAYS} days.`;
+  if (days > maxDays + graceDays) {
+    return `Books can be borrowed for up to ${maxDays} days.`;
   }
   return null;
 };

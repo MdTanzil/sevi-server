@@ -27,10 +27,14 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - Notifications: in-app notifications (currently restock alerts), listed
   newest first, with mark-one-read and mark-all-read
 - User profiles with roles (member, librarian, admin); admins manage users
-  and their roles
+  and their roles, edit user profiles, and create member records for
+  walk-in visitors who have no online account yet
 - Dashboard data for librarians and admins: library-wide stats (books,
   copies, users, borrows, overdue, out of stock), a list of all active
-  borrows across users, and category image updates
+  borrows across users, category management (add, rename — books follow
+  the rename — and delete), lending books on a user's behalf, changing an
+  active borrow's return date (up to 30 days), and marking borrows
+  returned (restores the book quantity)
 - JWT authentication: token issued on login, stored in an httpOnly cookie
 
 ## Tech stack
@@ -345,7 +349,8 @@ client calls this only after Firebase confirms the email change. Returns
   GET /api/v1/users
 ```
 
-Returns all users (`email`, `name`, `role`, `createdAt`).
+Returns all users (`email`, `name`, `phone`, `address`, `role`,
+`createdAt`).
 
 #### Change a user's role 🔒 (admin only)
 
@@ -393,17 +398,133 @@ Returns every user's active borrows (returned books excluded), most recent
 first. Each record carries the book title (`bookName`), the borrower's
 email, `borrowedDate`, `retunDate` and `status`.
 
-#### Update a category image 🔒 (librarian or admin)
+#### Add a category 🔒 (librarian or admin)
+
+```http
+  POST /api/v1/admin/categories
+```
+
+Body: `{ "name": "...", "image": "https://..." }`. The name is required
+and must be unique (case-insensitive) — a duplicate returns `409`. The
+image is optional but must be a valid `https` URL when given (`400`
+otherwise). Returns `201` with the created category.
+
+#### Update a category 🔒 (librarian or admin)
 
 ```http
   PATCH /api/v1/admin/categories/:id
 ```
 
-Body: `{ "image": "https://..." }`. Updates ONLY the category's `image`
-field — the value must be a non-empty `https` URL, otherwise the request
-returns `400`. Renaming a category is not supported: book records reference
-the category name, so a rename would break them. Returns `404` when the
-category does not exist.
+Body: `{ "name": "...", "image": "https://..." }` (either or both).
+Renaming a category also updates every book that references the old name,
+so the catalogue stays consistent; a name already used by another
+category returns `409`. The image must be a valid `https` URL (`400`
+otherwise); an empty string clears it. Returns `404` when the category
+does not exist, and `{ "category": {...}, "booksUpdated": N }` on success.
+
+#### Delete a category 🔒 (librarian or admin)
+
+```http
+  DELETE /api/v1/admin/categories/:id
+```
+
+Refused with `409` while any book references the category name. Returns
+`404` when the category does not exist.
+
+#### List users for the dashboard 🔒 (librarian or admin)
+
+```http
+  GET /api/v1/admin/users
+```
+
+Returns all users (`email`, `name`, `role`) — used by the dashboard for
+borrower names and the lend dialog. The admin-only `GET /api/v1/users`
+stays as the full management list.
+
+#### Add a user 🔒 (admin only)
+
+```http
+  POST /api/v1/admin/users
+```
+
+Body: `{ "email": "...", "name": "...", "phone": "...", "address": "..." }`.
+Creates a member record for a walk-in visitor who has no online account
+yet, so the librarian can lend to them and track their borrows. The
+email must be valid (`400` otherwise) and the name is required; a
+duplicate email returns `409`. The profile is created with role `member`
+(the role can be changed afterwards). When the person later signs up
+online with the same email, their existing profile — history and role
+included — is returned instead of a fresh one. Returns `201` with the
+profile.
+
+#### Update a user's profile 🔒 (admin only)
+
+```http
+  PUT /api/v1/admin/users/:email
+```
+
+Body: `{ "name": "...", "phone": "...", "address": "..." }` (any of the
+three). Role and email are never accepted here — role has its own
+endpoint and email its own flow. Returns `404` when the user does not
+exist, and the updated profile on success.
+
+#### Delete a user 🔒 (admin only)
+
+```http
+  DELETE /api/v1/admin/users/:email
+```
+
+An admin cannot delete their own account (`403`), and a user with an
+active borrow cannot be deleted (`409`). On success the profile, wishlist
+entries and notifications are removed; borrow history records stay — they
+are the library's records. Returns `404` when the user does not exist.
+
+#### Get a user's borrows 🔒 (librarian or admin)
+
+```http
+  GET /api/v1/admin/users/:email/borrows
+```
+
+Returns ALL borrows (active + returned) for one user, newest first.
+Returns `404` when the user does not exist.
+
+#### Lend a book on a user's behalf 🔒 (librarian or admin)
+
+```http
+  POST /api/v1/admin/borrows
+```
+
+Body: `{ "userEmail": "...", "bookId": "...", "returnDate": "YYYY-MM-DD" }`.
+Mirrors `POST /borrow` for the named user instead of the caller: the same
+5-day return rule, the same max-3-active-borrows limit, and the same
+out-of-stock guard. Returns `404` when the user or the book does not
+exist, `400` for an out-of-stock book, a user at the borrow limit, or an
+invalid return date. The book quantity is decremented by 1. Returns `201`
+with the created borrow record.
+
+#### Change a borrow's return date 🔒 (librarian or admin)
+
+```http
+  PATCH /api/v1/admin/borrows/:id
+```
+
+Body: `{ "retunDate": "YYYY-MM-DD" }` (the `returnDate` spelling is
+accepted too). Admin override window: today through today + 30 days (the
+member 5-day rule does not apply). Returns `404` when the borrow does not
+exist and `400` when it was already returned or the date is out of range.
+Returns the updated borrow.
+
+#### Mark a borrow returned 🔒 (librarian or admin)
+
+```http
+  POST /api/v1/admin/borrows/:id/return
+```
+
+Marks an active borrow returned on the borrower's behalf (book handed
+back at the desk) and restores the book quantity by 1, so one call
+completes the return — the member flow restores the quantity from the
+client instead. Returns `404` when the borrow does not exist and `400`
+when it was already returned. Returns the updated borrow record.
 
 #### Get my wishlist 🔒
 

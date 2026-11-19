@@ -102,7 +102,19 @@ const updateEmail = async (req, res) => {
 // list all users (admin only)
 const listUsers = async (req, res) => {
   const users = await db.usersCollection
-    .find({}, { projection: { email: 1, name: 1, role: 1, createdAt: 1 } })
+    .find(
+      {},
+      {
+        projection: {
+          email: 1,
+          name: 1,
+          phone: 1,
+          address: 1,
+          role: 1,
+          createdAt: 1,
+        },
+      }
+    )
     .sort({ createdAt: 1 })
     .toArray();
   res.send(users);
