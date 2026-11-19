@@ -11,8 +11,9 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - Book catalogue: list all books, filter by category, single-book lookup
 - Add and update books, including optional metadata (ISBN, publisher,
   published year, language, pages) — librarians and admins only
-- Borrowing: record borrows (max 3 active borrows per user), list a user's
-  borrowed books, return books with a kept borrow history (quantity tracking)
+- Borrowing: record borrows (max 3 active borrows per user, return date
+  within 5 days), list a user's borrowed books, return books with a kept
+  borrow history (quantity tracking)
 - User profiles with roles (member, librarian, admin); admins manage users
   and their roles
 - JWT authentication: token issued on login, stored in an httpOnly cookie
@@ -220,6 +221,10 @@ updated (optional metadata fields are normalized the same way).
 The borrower's email is taken from the JWT, not from the request body.
 Each user may have at most 3 active borrows; a fourth borrow returns
 `400 { "error": "Borrow limit reached (3 books)" }`.
+The return date (`retunDate`, `YYYY-MM-DD`) must be within 5 days of
+today — the server allows 1 extra day of grace for timezone skew, so
+dates more than 6 days out (or more than 1 day in the past) return
+`400` with a clear message.
 
 #### Get borrowed books 🔒
 

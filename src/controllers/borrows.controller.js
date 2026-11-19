@@ -5,6 +5,51 @@ const getTokenEmail = require("../utils/tokenEmail");
 // Maximum number of books a user may have borrowed at the same time.
 const MAX_ACTIVE_BORROWS = 3;
 
+// Books can be borrowed for at most this many days. The server allows
+// one extra day of grace in each direction for timezone skew between
+// the borrower's clock and the server's.
+const MAX_BORROW_DAYS = 5;
+const RETURN_DATE_GRACE_DAYS = 1;
+
+// Validate a YYYY-MM-DD return date against today (UTC midnight — the
+// server cannot know the borrower's timezone, so the grace day covers
+// the difference). Returns an error message string, or null when valid.
+const validateReturnDate = (value, today = new Date()) => {
+  if (typeof value !== "string" || value.trim() === "") {
+    return "A return date is required.";
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) {
+    return "The return date must be a valid YYYY-MM-DD date.";
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const due = Date.UTC(year, month - 1, day);
+  // Guard against rollover (e.g. 2026-02-30 becomes 2026-03-02).
+  const check = new Date(due);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return "The return date must be a valid YYYY-MM-DD date.";
+  }
+  const start = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate()
+  );
+  const days = Math.round((due - start) / 86400000);
+  if (days < -RETURN_DATE_GRACE_DAYS) {
+    return "The return date cannot be in the past.";
+  }
+  if (days > MAX_BORROW_DAYS + RETURN_DATE_GRACE_DAYS) {
+    return `Books can be borrowed for up to ${MAX_BORROW_DAYS} days.`;
+  }
+  return null;
+};
+
 // A borrow is active unless it was returned. Documents without a status
 // field predate the status feature and count as borrowed: in MongoDB, $ne
 // matches documents where the field is missing.
@@ -28,10 +73,16 @@ const getBorrowerEmail = (req, res) => {
   return email;
 };
 
-// add a borrowed book (at most MAX_ACTIVE_BORROWS active borrows per user)
+// add a borrowed book (at most MAX_ACTIVE_BORROWS active borrows per user;
+// the return date must be within MAX_BORROW_DAYS of today, plus grace)
 const addBorrow = async (req, res) => {
   const email = getBorrowerEmail(req, res);
   if (!email) return;
+  const dateError = validateReturnDate(req.body.retunDate);
+  if (dateError) {
+    res.status(400).send({ error: dateError });
+    return;
+  }
   const activeCount = await countActiveBorrows(db.borrowCollection, email);
   if (activeCount >= MAX_ACTIVE_BORROWS) {
     res.status(400).send({ error: "Borrow limit reached (3 books)" });
@@ -110,6 +161,9 @@ const deleteBorrow = async (req, res) => {
 
 module.exports = {
   MAX_ACTIVE_BORROWS,
+  MAX_BORROW_DAYS,
+  RETURN_DATE_GRACE_DAYS,
+  validateReturnDate,
   activeBorrowQuery,
   countActiveBorrows,
   addBorrow,
