@@ -1,6 +1,7 @@
 const { ObjectId } = require("mongodb");
 const db = require("../config/db");
 const getTokenEmail = require("../utils/tokenEmail");
+const { quantityOf } = require("../utils/restock");
 
 // Maximum number of books a user may have borrowed at the same time.
 const MAX_ACTIVE_BORROWS = 3;
@@ -73,6 +74,27 @@ const getBorrowerEmail = (req, res) => {
   return email;
 };
 
+// Out-of-stock guard: a book with no available copies cannot be
+// borrowed (the details page disables Borrow too, but the server is the
+// authority). Returns an error message when the book exists and is out
+// of stock, or null when borrowing may proceed. A missing book or a
+// malformed book id skips the check — the borrow is recorded exactly
+// as before.
+const checkBookInStock = async (bookId) => {
+  let id;
+  try {
+    id = new ObjectId(bookId);
+  } catch {
+    return null;
+  }
+  const book = await db.booksCollection.findOne({ _id: id });
+  if (!book) return null;
+  if (quantityOf(book) < 1) {
+    return "This book is out of stock.";
+  }
+  return null;
+};
+
 // add a borrowed book (at most MAX_ACTIVE_BORROWS active borrows per user;
 // the return date must be within MAX_BORROW_DAYS of today, plus grace)
 const addBorrow = async (req, res) => {
@@ -81,6 +103,11 @@ const addBorrow = async (req, res) => {
   const dateError = validateReturnDate(req.body.retunDate);
   if (dateError) {
     res.status(400).send({ error: dateError });
+    return;
+  }
+  const stockError = await checkBookInStock(req.body.bookId);
+  if (stockError) {
+    res.status(400).send({ error: stockError });
     return;
   }
   const activeCount = await countActiveBorrows(db.borrowCollection, email);

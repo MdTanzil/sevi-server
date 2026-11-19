@@ -25,6 +25,10 @@ const categoriesCollection = client.db("booksDB").collection("categories");
 const booksCollection = client.db("booksDB").collection("books");
 const borrowCollection = client.db("booksDB").collection("borrows");
 const usersCollection = client.db("booksDB").collection("users");
+const wishlistCollection = client.db("booksDB").collection("wishlists");
+const notificationsCollection = client
+  .db("booksDB")
+  .collection("notifications");
 
 module.exports = {
   client,
@@ -33,4 +37,6 @@ module.exports = {
   booksCollection,
   borrowCollection,
   usersCollection,
+  wishlistCollection,
+  notificationsCollection,
 };
