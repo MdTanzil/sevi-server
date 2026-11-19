@@ -16,6 +16,9 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
   borrow history (quantity tracking)
 - User profiles with roles (member, librarian, admin); admins manage users
   and their roles
+- Dashboard data for librarians and admins: library-wide stats (books,
+  copies, users, borrows, overdue, out of stock) and a list of all active
+  borrows across users
 - JWT authentication: token issued on login, stored in an httpOnly cookie
 
 ## Tech stack
@@ -61,6 +64,7 @@ role from the client.
 | Browse books, borrow & return (max 3 at a time), view own history | ✅ | ✅ | ✅ |
 | Edit own profile (name, phone, address, email) | ✅ | ✅ | ✅ |
 | Add & update books | ❌ | ✅ | ✅ |
+| View dashboard stats & all active borrows | ❌ | ✅ | ✅ |
 | List users & change roles | ❌ | ❌ | ✅ |
 | Delete borrow records | ❌ | ❌ | ✅ |
 
@@ -75,12 +79,14 @@ role from the client.
     ├── config/
     │   └── db.js             # MongoClient setup, dbConnect(), collections
     ├── routes/               # One router per resource, mounted under /api/v1
+    │   ├── admin.routes.js
     │   ├── auth.routes.js
     │   ├── books.routes.js
     │   ├── borrows.routes.js
     │   ├── categories.routes.js
     │   └── users.routes.js
     ├── controllers/          # Route handlers (one file per resource)
+    │   ├── admin.controller.js
     │   ├── auth.controller.js
     │   ├── books.controller.js
     │   ├── borrows.controller.js
@@ -313,6 +319,42 @@ Returns all users (`email`, `name`, `role`, `createdAt`).
 Body: `{ "role": "member" | "librarian" | "admin" }`. An admin cannot
 change their own role (prevents lockout). Returns `404` when the user does
 not exist.
+
+#### Get dashboard stats 🔒 (librarian or admin)
+
+```http
+  GET /api/v1/admin/stats
+```
+
+Returns library-wide counts for the dashboard. Example response:
+
+```json
+{
+  "totalBooks": 32,
+  "totalCopies": 120,
+  "totalUsers": 5,
+  "totalBorrows": 20,
+  "activeBorrows": 3,
+  "overdueBorrows": 1,
+  "outOfStockBooks": 2
+}
+```
+
+`totalCopies` is the sum of every book's quantity (quantities stored as
+strings are converted); `activeBorrows` counts borrows that have not been
+returned (records without a `status` count as borrowed); `overdueBorrows`
+counts active borrows whose return date is in the past;
+`outOfStockBooks` counts books with quantity 0.
+
+#### Get all active borrows 🔒 (librarian or admin)
+
+```http
+  GET /api/v1/admin/borrows
+```
+
+Returns every user's active borrows (returned books excluded), most recent
+first. Each record carries the book title (`bookName`), the borrower's
+email, `borrowedDate`, `retunDate` and `status`.
 
 ## Deployment
 

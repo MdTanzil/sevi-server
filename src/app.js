@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth.routes");
+const adminRoutes = require("./routes/admin.routes");
 const booksRoutes = require("./routes/books.routes");
 const borrowsRoutes = require("./routes/borrows.routes");
 const categoriesRoutes = require("./routes/categories.routes");
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/v1", authRoutes);
+app.use("/api/v1", adminRoutes);
 app.use("/api/v1", booksRoutes);
 app.use("/api/v1", borrowsRoutes);
 app.use("/api/v1", categoriesRoutes);
