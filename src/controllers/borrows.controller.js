@@ -58,6 +58,38 @@ const validateReturnDate = (
   return null;
 };
 
+// How many days one loan extension adds to the return date. A member
+// may extend each loan once.
+const EXTENSION_DAYS = 5;
+
+// Parse a stored YYYY-MM-DD date as UTC midnight, or null when the
+// value is missing or malformed (rollover dates like 2026-02-30 are
+// rejected, not silently shifted).
+const parseStoredDate = (value) => {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const due = Date.UTC(year, month - 1, day);
+  const check = new Date(due);
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() !== month - 1 ||
+    check.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return due;
+};
+
+// Today at UTC midnight (server-side "today" for due-date comparisons).
+const todayUtc = () => {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+};
+
 // A borrow is active unless it was returned. Documents without a status
 // field predate the status feature and count as borrowed: in MongoDB, $ne
 // matches documents where the field is missing.
@@ -179,6 +211,66 @@ const returnBorrow = async (req, res) => {
   res.send(result);
 };
 
+// extend a loan by EXTENSION_DAYS (only the owner, only once, only
+// while the book is not overdue). The new return date is the current
+// one plus EXTENSION_DAYS; the record gains `extended: true` so a
+// second extension is refused.
+const extendBorrow = async (req, res) => {
+  try {
+    const email = getBorrowerEmail(req, res);
+    if (!email) return;
+    let id;
+    try {
+      id = new ObjectId(req.params.id);
+    } catch {
+      res.status(400).send({ error: "Invalid borrow id." });
+      return;
+    }
+    const query = { _id: id };
+    const record = await db.borrowCollection.findOne(query);
+    if (!record) {
+      res.status(404).send({ status: "Not Found", code: "404" });
+      return;
+    }
+    if (record.email !== email) {
+      res.status(403).send({ status: "Forbidden", code: "403" });
+      return;
+    }
+    if (record.status === "returned") {
+      res.status(400).send({ error: "This book was already returned" });
+      return;
+    }
+    if (record.extended) {
+      res
+        .status(400)
+        .send({ error: "This loan has already been extended once." });
+      return;
+    }
+    const due = parseStoredDate(record.retunDate);
+    if (due === null) {
+      res
+        .status(400)
+        .send({ error: "This borrow has no valid return date." });
+      return;
+    }
+    if (due < todayUtc()) {
+      res.status(400).send({
+        error: "Overdue books cannot be extended. Please return the book.",
+      });
+      return;
+    }
+    const newRetunDate = new Date(due + EXTENSION_DAYS * 86400000)
+      .toISOString()
+      .split("T")[0];
+    await db.borrowCollection.updateOne(query, {
+      $set: { retunDate: newRetunDate, extended: true },
+    });
+    res.send({ ...record, retunDate: newRetunDate, extended: true });
+  } catch (error) {
+    res.status(500).send({ error: "Could not extend the loan" });
+  }
+};
+
 // delete a borrow record (admin only — cleanup use; returns use the
 // PATCH /borrows/:id/return endpoint instead)
 const deleteBorrow = async (req, res) => {
@@ -197,6 +289,7 @@ module.exports = {
   MAX_ACTIVE_BORROWS,
   MAX_BORROW_DAYS,
   RETURN_DATE_GRACE_DAYS,
+  EXTENSION_DAYS,
   validateReturnDate,
   activeBorrowQuery,
   countActiveBorrows,
@@ -204,5 +297,6 @@ module.exports = {
   getBorrows,
   getBorrowHistory,
   returnBorrow,
+  extendBorrow,
   deleteBorrow,
 };

@@ -6,6 +6,7 @@ const {
   getBorrows,
   getBorrowHistory,
   returnBorrow,
+  extendBorrow,
   deleteBorrow,
 } = require("../controllers/borrows.controller");
 
@@ -15,6 +16,7 @@ router.post("/borrow", verifyToken, addBorrow);
 router.get("/borrows", verifyToken, getBorrows);
 router.get("/borrows/history", verifyToken, getBorrowHistory);
 router.patch("/borrows/:id/return", verifyToken, returnBorrow);
+router.patch("/borrows/:id/extend", verifyToken, extendBorrow);
 router.delete(
   "/borrows/:id",
   verifyToken,

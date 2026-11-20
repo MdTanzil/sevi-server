@@ -16,7 +16,8 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
   removed with it
 - Borrowing: record borrows (max 3 active borrows per user, return date
   within 5 days), list a user's borrowed books, return books with a kept
-  borrow history (quantity tracking). Out-of-stock books cannot be
+  borrow history (quantity tracking), and extend a loan once by 5 days
+  (not for overdue or already-returned books). Out-of-stock books cannot be
   borrowed — the server rejects the borrow even if the client check is
   bypassed.
 - Wishlist: users save books to a personal wishlist (including out-of-stock
@@ -303,6 +304,18 @@ Marks the borrow as returned (sets `status` to `returned` and
 `returnedDate` to today) — the record is kept for the borrow history.
 Returns `403` for a borrow that belongs to another user, `404` when the
 record does not exist, and `400` when it was already returned.
+
+#### Extend a loan 🔒
+
+```http
+  PATCH /api/v1/borrows/:id/extend
+```
+
+Extends the borrower's own loan once by 5 days: the return date becomes
+the current return date + 5 days, and the record gains `extended: true`.
+Returns `403` for a borrow that belongs to another user, `404` when the
+record does not exist, and `400` when the book was already returned, the
+loan was already extended, or the book is overdue.
 
 #### Delete a borrowed book 🔒 (admin only)
 
