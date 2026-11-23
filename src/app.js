@@ -9,6 +9,7 @@ const categoriesRoutes = require("./routes/categories.routes");
 const usersRoutes = require("./routes/users.routes");
 const wishlistRoutes = require("./routes/wishlist.routes");
 const notificationsRoutes = require("./routes/notifications.routes");
+const reviewsRoutes = require("./routes/reviews.routes");
 
 const app = express();
 
@@ -33,5 +34,6 @@ app.use("/api/v1", categoriesRoutes);
 app.use("/api/v1", usersRoutes);
 app.use("/api/v1", wishlistRoutes);
 app.use("/api/v1", notificationsRoutes);
+app.use("/api/v1", reviewsRoutes);
 
 module.exports = app;

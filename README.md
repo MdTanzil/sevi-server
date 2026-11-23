@@ -12,8 +12,8 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - Add and update books, including optional metadata (ISBN, publisher,
   published year, language, pages) — librarians and admins only
 - Delete books — librarians and admins only; refused while a book has an
-  active borrow, and the book's wishlist entries and notifications are
-  removed with it
+  active borrow, and the book's wishlist entries, notifications and
+  reviews are removed with it
 - Borrowing: record borrows (max 3 active borrows per user, return date
   within 5 days), list a user's borrowed books, return books with a kept
   borrow history (quantity tracking), and extend a loan once by 5 days
@@ -25,6 +25,10 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
   from 0 to above 0, via a stock edit or a return), each user who
   wishlisted it gets an in-app notification (one unread notification per
   book — no duplicates while one is still unread)
+- Reviews: signed-in users leave one star rating (1–5) plus an optional
+  short review per book, and edit or delete their own review; anyone can
+  read a book's reviews with the average rating and review count (the
+  reviewer's email is never exposed — ownership is shown with `isMine`)
 - Notifications: in-app notifications (currently restock alerts), listed
   newest first, with mark-one-read and mark-all-read
 - User profiles with roles (member, librarian, admin); admins manage users
@@ -66,7 +70,7 @@ Create a `.env` file in the project root:
 | `NODE_ENV` | Set to `production` for secure, cross-site auth cookies |
 
 The server connects to the `booksDB` database (collections: `categories`,
-`books`, `borrows`, `users`, `wishlists`, `notifications`). CORS allows `http://localhost:5173` and
+`books`, `borrows`, `users`, `wishlists`, `notifications`, `reviews`). CORS allows `http://localhost:5173` and
 `https://sevi-efc34.web.app` with credentials.
 
 ## Roles & permissions
@@ -105,6 +109,7 @@ role from the client.
     │   ├── borrows.routes.js
     │   ├── categories.routes.js
     │   ├── notifications.routes.js
+    │   ├── reviews.routes.js
     │   ├── users.routes.js
     │   └── wishlist.routes.js
     ├── controllers/          # Route handlers (one file per resource)
@@ -114,10 +119,12 @@ role from the client.
     │   ├── borrows.controller.js
     │   ├── categories.controller.js
     │   ├── notifications.controller.js
+    │   ├── reviews.controller.js
     │   ├── users.controller.js
     │   └── wishlist.controller.js
     ├── middlewares/
     │   ├── verifyToken.js    # JWT cookie verification
+    │   ├── optionalToken.js  # Like verifyToken, but never rejects (public reads)
     │   └── requireRole.js    # Role gate (reads the caller's users profile)
     └── utils/
         ├── normalizeBook.js  # Book metadata normalization before saving
@@ -241,10 +248,11 @@ Deletes the book. Returns `404` when the book does not exist and `400`
 for a malformed id. The delete is refused with `409` while the book has
 an active borrow (borrows without a `status` count as borrowed) — the
 response carries a clear message naming the book. When a book is
-deleted, its wishlist entries and notifications are removed with it, so
-no orphaned references remain. A successful delete responds with
+deleted, its wishlist entries, notifications and reviews are removed
+with it, so no orphaned references remain. A successful delete responds
+with
 `{ "deleted": true, "bookId": "...", "wishlistsRemoved": 0,
-"notificationsRemoved": 0 }`.
+"notificationsRemoved": 0, "reviewsRemoved": 0 }`.
 
 #### Decrease book quantity 🔒
 
@@ -597,6 +605,50 @@ user.
 ```
 
 Marks all of the token owner's unread notifications as read.
+
+#### Get a book's reviews
+
+```http
+  GET /api/v1/books/:bookId/reviews
+```
+
+Public — anyone can read a book's reviews, newest first. Returns
+`{ reviews, average, count }`: the average is the mean star rating
+rounded to one decimal (`null` when there are no reviews). Reviewer
+emails are never exposed; when the caller is signed in, their own review
+carries `isMine: true`. Returns `404` when the book does not exist, `400`
+for a malformed book id.
+
+#### Add a review 🔒
+
+```http
+  POST /api/v1/books/:bookId/reviews
+```
+
+Body: `{ "rating": 1–5, "text": "optional, max 1000 characters",
+"reviewerName": "display name" }`. One review per user per book — a
+second review returns `409` (edit the existing one instead). The email
+always comes from the JWT; `reviewerName` is only a display label.
+Returns `201` with the created review, `404` when the book does not
+exist, `400` for a missing/invalid rating or over-long text.
+
+#### Edit my review 🔒
+
+```http
+  PUT /api/v1/books/:bookId/reviews/:reviewId
+```
+
+Body: `{ "rating": 1–5, "text": "..." }`. Only the review's owner can
+edit it (`403` otherwise). Returns `404` when the review does not exist.
+
+#### Delete a review 🔒
+
+```http
+  DELETE /api/v1/books/:bookId/reviews/:reviewId
+```
+
+The review's owner or an admin (moderation) can delete it (`403`
+otherwise). Returns `404` when the review does not exist.
 
 ## Deployment
 

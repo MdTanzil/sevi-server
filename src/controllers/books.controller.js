@@ -4,6 +4,7 @@ const {
   borrowCollection,
   wishlistCollection,
   notificationsCollection,
+  reviewsCollection,
 } = require("../config/db");
 const normalizeBook = require("../utils/normalizeBook");
 const { quantityOf, notifyRestock } = require("../utils/restock");
@@ -105,11 +106,15 @@ const deleteBook = async (req, res) => {
     const notifications = await notificationsCollection.deleteMany({
       bookId: { $in: idForms },
     });
+    const reviews = await reviewsCollection.deleteMany({
+      bookId: { $in: idForms },
+    });
     res.send({
       deleted: true,
       bookId,
       wishlistsRemoved: wishlists.deletedCount,
       notificationsRemoved: notifications.deletedCount,
+      reviewsRemoved: reviews.deletedCount,
     });
   } catch (error) {
     res.status(500).send({ error: "Could not delete the book" });
