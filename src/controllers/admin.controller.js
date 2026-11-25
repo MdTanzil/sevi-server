@@ -6,6 +6,10 @@ const {
   MAX_ACTIVE_BORROWS,
 } = require("./borrows.controller");
 const { quantityOf, notifyRestock } = require("../utils/restock");
+const {
+  notifyReservists,
+  clearReservationForBorrow,
+} = require("../utils/reservations");
 const getTokenEmail = require("../utils/tokenEmail");
 
 // How far out a librarian/admin may push a return date (the member
@@ -480,6 +484,8 @@ const adminLendBorrow = async (req, res) => {
       { _id: id },
       { $set: { quantity: quantityOf(book) - 1 } }
     );
+    // Lending on behalf fulfils a reservation too.
+    await clearReservationForBorrow(userEmail, book._id.toString());
     res.status(201).send({ ...borrow, _id: result.insertedId });
   } catch (error) {
     res.status(500).send({ error: "Could not lend the book" });
@@ -574,6 +580,7 @@ const adminReturnBorrow = async (req, res) => {
         quantityRestored = true;
         if (wasOutOfStock) {
           await notifyRestock(book._id, book.name);
+          await notifyReservists(book._id, book.name, quantityOf(book) + 1);
         }
       }
     }

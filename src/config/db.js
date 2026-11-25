@@ -30,6 +30,9 @@ const notificationsCollection = client
   .db("booksDB")
   .collection("notifications");
 const reviewsCollection = client.db("booksDB").collection("reviews");
+const reservationsCollection = client
+  .db("booksDB")
+  .collection("reservations");
 
 module.exports = {
   client,
@@ -41,4 +44,5 @@ module.exports = {
   wishlistCollection,
   notificationsCollection,
   reviewsCollection,
+  reservationsCollection,
 };

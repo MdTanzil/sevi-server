@@ -2,6 +2,7 @@ const { ObjectId } = require("mongodb");
 const db = require("../config/db");
 const getTokenEmail = require("../utils/tokenEmail");
 const { quantityOf } = require("../utils/restock");
+const { clearReservationForBorrow } = require("../utils/reservations");
 
 // Maximum number of books a user may have borrowed at the same time.
 const MAX_ACTIVE_BORROWS = 3;
@@ -157,6 +158,9 @@ const addBorrow = async (req, res) => {
   const borrowBook = { ...req.body, email, status: "borrowed" };
   delete borrowBook.returnedDate;
   const result = await db.borrowCollection.insertOne(borrowBook);
+  // Borrowing fulfils a reservation: remove the borrower's reservation
+  // for this book, if they had one.
+  await clearReservationForBorrow(email, req.body.bookId);
   res.send(result);
 };
 

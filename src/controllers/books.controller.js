@@ -5,9 +5,11 @@ const {
   wishlistCollection,
   notificationsCollection,
   reviewsCollection,
+  reservationsCollection,
 } = require("../config/db");
 const normalizeBook = require("../utils/normalizeBook");
 const { quantityOf, notifyRestock } = require("../utils/restock");
+const { notifyReservists } = require("../utils/reservations");
 
 // get categories base book
 const getBooksByCategory = async (req, res) => {
@@ -62,6 +64,7 @@ const updateBook = async (req, res) => {
     quantityOf(body) >= 1
   ) {
     await notifyRestock(previous._id, previous.name);
+    await notifyReservists(previous._id, previous.name, quantityOf(body));
   }
   res.send(result);
 };
@@ -109,12 +112,16 @@ const deleteBook = async (req, res) => {
     const reviews = await reviewsCollection.deleteMany({
       bookId: { $in: idForms },
     });
+    const reservations = await reservationsCollection.deleteMany({
+      bookId: { $in: idForms },
+    });
     res.send({
       deleted: true,
       bookId,
       wishlistsRemoved: wishlists.deletedCount,
       notificationsRemoved: notifications.deletedCount,
       reviewsRemoved: reviews.deletedCount,
+      reservationsRemoved: reservations.deletedCount,
     });
   } catch (error) {
     res.status(500).send({ error: "Could not delete the book" });
@@ -153,6 +160,7 @@ const increaseBookQuantity = async (req, res) => {
   // back in stock and wishlisted users get notified.
   if (quantityOf(find) < 1) {
     await notifyRestock(find._id, find.name);
+    await notifyReservists(find._id, find.name, quantityOf(find) + 1);
   }
   res.send(result);
 };

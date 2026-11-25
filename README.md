@@ -12,8 +12,8 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
 - Add and update books, including optional metadata (ISBN, publisher,
   published year, language, pages) — librarians and admins only
 - Delete books — librarians and admins only; refused while a book has an
-  active borrow, and the book's wishlist entries, notifications and
-  reviews are removed with it
+  active borrow, and the book's wishlist entries, notifications, reviews
+  and reservations are removed with it
 - Borrowing: record borrows (max 3 active borrows per user, return date
   within 5 days), list a user's borrowed books, return books with a kept
   borrow history (quantity tracking), and extend a loan once by 5 days
@@ -29,8 +29,14 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
   short review per book, and edit or delete their own review; anyone can
   read a book's reviews with the average rating and review count (the
   reviewer's email is never exposed — ownership is shown with `isMine`)
-- Notifications: in-app notifications (currently restock alerts), listed
-  newest first, with mark-one-read and mark-all-read
+- Reservations: signed-in users reserve an out-of-stock book and join its
+  hold queue (one reservation per user per book); when the book comes
+  back, the first people in the queue — as many as there are copies — get
+  an in-app notification. Borrowing the book cancels the borrower's
+  reservation automatically; reservations can also be cancelled by the
+  reserver or an admin
+- Notifications: in-app notifications (currently restock, reservation
+  alerts), listed newest first, with mark-one-read and mark-all-read
 - User profiles with roles (member, librarian, admin); admins manage users
   and their roles, edit user profiles, and create member records for
   walk-in visitors who have no online account yet
@@ -70,7 +76,7 @@ Create a `.env` file in the project root:
 | `NODE_ENV` | Set to `production` for secure, cross-site auth cookies |
 
 The server connects to the `booksDB` database (collections: `categories`,
-`books`, `borrows`, `users`, `wishlists`, `notifications`, `reviews`). CORS allows `http://localhost:5173` and
+`books`, `borrows`, `users`, `wishlists`, `notifications`, `reviews`, `reservations`). CORS allows `http://localhost:5173` and
 `https://sevi-efc34.web.app` with credentials.
 
 ## Roles & permissions
@@ -109,6 +115,7 @@ role from the client.
     │   ├── borrows.routes.js
     │   ├── categories.routes.js
     │   ├── notifications.routes.js
+    │   ├── reservations.routes.js
     │   ├── reviews.routes.js
     │   ├── users.routes.js
     │   └── wishlist.routes.js
@@ -119,6 +126,7 @@ role from the client.
     │   ├── borrows.controller.js
     │   ├── categories.controller.js
     │   ├── notifications.controller.js
+    │   ├── reservations.controller.js
     │   ├── reviews.controller.js
     │   ├── users.controller.js
     │   └── wishlist.controller.js
@@ -128,6 +136,7 @@ role from the client.
     │   └── requireRole.js    # Role gate (reads the caller's users profile)
     └── utils/
         ├── normalizeBook.js  # Book metadata normalization before saving
+        ├── reservations.js   # notifyReservists() + clearReservationForBorrow()
         ├── restock.js        # quantityOf() + notifyRestock() (wishlist alerts)
         ├── roles.js          # Role constants + ADMIN_EMAILS handling
         └── tokenEmail.js     # Extract the user's email from a decoded JWT
@@ -248,11 +257,11 @@ Deletes the book. Returns `404` when the book does not exist and `400`
 for a malformed id. The delete is refused with `409` while the book has
 an active borrow (borrows without a `status` count as borrowed) — the
 response carries a clear message naming the book. When a book is
-deleted, its wishlist entries, notifications and reviews are removed
-with it, so no orphaned references remain. A successful delete responds
-with
+deleted, its wishlist entries, notifications, reviews and reservations
+are removed with it, so no orphaned references remain. A successful
+delete responds with
 `{ "deleted": true, "bookId": "...", "wishlistsRemoved": 0,
-"notificationsRemoved": 0, "reviewsRemoved": 0 }`.
+"notificationsRemoved": 0, "reviewsRemoved": 0, "reservationsRemoved": 0 }`.
 
 #### Decrease book quantity 🔒
 
@@ -649,6 +658,52 @@ edit it (`403` otherwise). Returns `404` when the review does not exist.
 
 The review's owner or an admin (moderation) can delete it (`403`
 otherwise). Returns `404` when the review does not exist.
+
+#### Get a book's reservation queue
+
+```http
+  GET /api/v1/books/:bookId/reservations
+```
+
+Public — anyone can see a book's hold queue, oldest first. Returns
+`{ reservations, count }`; each reservation has `position` (1-based
+place in the queue) and `reserverName`. Reserver emails are never
+exposed; when the caller is signed in, their own reservation carries
+`isMine: true`. Returns `404` when the book does not exist, `400` for a
+malformed book id.
+
+#### Get my reservations 🔒
+
+```http
+  GET /api/v1/reservations
+```
+
+Returns the token owner's reservations, newest first. Each entry
+carries the book's current details (`name`, `author`, `imageUrl`,
+`quantity`) and the caller's `position` in that book's queue.
+
+#### Reserve a book 🔒
+
+```http
+  POST /api/v1/books/:bookId/reservations
+```
+
+Body: `{ "reserverName": "display name" }`. Only out-of-stock books
+can be reserved (`400` otherwise). One reservation per user per book —
+a second reservation returns `409`. The email always comes from the
+JWT; `reserverName` is only a display label. Returns `201` with the
+created reservation (including its `position` in the queue), `404` when
+the book does not exist.
+
+#### Cancel a reservation 🔒
+
+```http
+  DELETE /api/v1/books/:bookId/reservations/:reservationId
+```
+
+The reserver or an admin (moderation) can cancel it (`403` otherwise).
+Returns `404` when the reservation does not exist. Borrowing the book
+also cancels the borrower's reservation automatically.
 
 ## Deployment
 
