@@ -2,12 +2,14 @@ const db = require("../config/db");
 
 // Due-date reminders: for each of the user's ACTIVE borrows, create an
 // in-app notification when the book is due tomorrow (or today), and
-// another when it goes overdue. One unread reminder per (user, book,
-// kind) — no duplicates while one is still unread. When a book goes
-// overdue, its stale due-soon reminder is removed. Reminders for books
-// the user no longer has on loan (returned since the reminder was
-// created) are pruned — read or unread — so the bell never shows a due
-// reminder for a book that is already back.
+// another when it goes overdue. One reminder per (user, book, kind, due
+// date) — a reminder that was already read does not spawn a duplicate
+// on the next poll, and a reminder made for an older due date (the loan
+// was extended) is removed and replaced. When a book goes overdue, its
+// stale due-soon reminder is removed. Reminders for books the user no
+// longer has on loan (returned since the reminder was created) are
+// pruned — read or unread — so the bell never shows a due reminder for
+// a book that is already back.
 //
 // This runs lazily whenever the user's notifications are listed — the
 // navbar bell polls that endpoint every minute while signed in — so no
@@ -67,6 +69,17 @@ const checkDueReminders = async (email) => {
       const daysUntilDue = Math.round((due - today) / 86400000);
       const bookId = borrow.bookId;
       const bookName = borrow.bookName || "A borrowed book";
+      // Drop reminders made for an older due date (the loan was
+      // extended) — their "due back on" wording is stale. Reminders
+      // created before the dueDate field existed have no dueDate, and
+      // $ne matches a missing field, so they are cleaned up too and
+      // recreated below when still due.
+      await db.notificationsCollection.deleteMany({
+        email,
+        type: { $in: ["due-soon", "overdue"] },
+        bookId,
+        dueDate: { $ne: borrow.retunDate },
+      });
       if (daysUntilDue < 0) {
         // Overdue: replace any due-soon reminder for this book, read or
         // not — its "due back on" wording is stale now.
@@ -79,7 +92,6 @@ const checkDueReminders = async (email) => {
           email,
           type: "overdue",
           bookId,
-          read: false,
         });
         if (existing) continue;
         await db.notificationsCollection.insertOne({
@@ -87,6 +99,7 @@ const checkDueReminders = async (email) => {
           type: "overdue",
           bookId,
           bookName,
+          dueDate: borrow.retunDate,
           message: `"${bookName}" is overdue — it was due back on ${borrow.retunDate}. Please return it as soon as you can.`,
           read: false,
           createdAt: new Date().toISOString(),
@@ -96,7 +109,6 @@ const checkDueReminders = async (email) => {
           email,
           type: "due-soon",
           bookId,
-          read: false,
         });
         if (existing) continue;
         await db.notificationsCollection.insertOne({
@@ -104,6 +116,7 @@ const checkDueReminders = async (email) => {
           type: "due-soon",
           bookId,
           bookName,
+          dueDate: borrow.retunDate,
           message: `"${bookName}" is due back on ${borrow.retunDate} — return it on time to avoid it going overdue.`,
           read: false,
           createdAt: new Date().toISOString(),
