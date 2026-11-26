@@ -35,8 +35,9 @@ System. Express + MongoDB Atlas, with JWT cookie authentication.
   an in-app notification. Borrowing the book cancels the borrower's
   reservation automatically; reservations can also be cancelled by the
   reserver or an admin
-- Notifications: in-app notifications (currently restock, reservation
-  alerts), listed newest first, with mark-one-read and mark-all-read
+- Notifications: in-app notifications (restock, reservation and
+  due-date reminders), listed newest first, with mark-one-read and
+  mark-all-read
 - User profiles with roles (member, librarian, admin); admins manage users
   and their roles, edit user profiles, and create member records for
   walk-in visitors who have no online account yet
@@ -136,6 +137,7 @@ role from the client.
     │   └── requireRole.js    # Role gate (reads the caller's users profile)
     └── utils/
         ├── normalizeBook.js  # Book metadata normalization before saving
+        ├── dueReminders.js   # checkDueReminders() (lazy due-date reminders)
         ├── reservations.js   # notifyReservists() + clearReservationForBorrow()
         ├── restock.js        # quantityOf() + notifyRestock() (wishlist alerts)
         ├── roles.js          # Role constants + ADMIN_EMAILS handling
@@ -592,11 +594,16 @@ Returns `404` when the book is not on the token owner's wishlist.
 ```
 
 Returns the token owner's in-app notifications, newest first. Each
-notification has `type` (currently only `restock`), `bookId`, `bookName`,
-`message`, `read`, and `createdAt`. A restock notification is created
-when a wishlisted book's quantity goes from 0 to above 0 (via a stock
-edit or a book return); a user who already has an unread restock
-notification for the same book does not get a second one.
+notification has `type` (`restock`, `reservation`, `due-soon`,
+`overdue`), `bookId`, `bookName`, `message`, `read`, and `createdAt`. A
+restock notification is created when a wishlisted book's quantity goes
+from 0 to above 0 (via a stock edit or a book return); a user who
+already has an unread restock notification for the same book does not
+get a second one. Listing also runs the lazy due-date reminder check
+(see `dueReminders.js`): a borrowed book that is due tomorrow or today
+creates one unread `due-soon` notification, and a book past its due
+date creates one unread `overdue` notification (replacing the stale
+due-soon one); reminders for returned books are removed.
 
 #### Mark a notification as read 🔒
 

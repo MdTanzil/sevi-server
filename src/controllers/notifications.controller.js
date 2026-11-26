@@ -1,6 +1,7 @@
 const { ObjectId } = require("mongodb");
 const db = require("../config/db");
 const getTokenEmail = require("../utils/tokenEmail");
+const { checkDueReminders } = require("../utils/dueReminders");
 
 // The notification owner's email always comes from the verified JWT
 // (req.decode), never from the request body or query string. Returns null
@@ -15,10 +16,15 @@ const getOwnerEmail = (req, res) => {
 };
 
 // GET /notifications — the token owner's notifications, newest first.
+// Listing also runs the lazy due-date reminder check first: borrowing a
+// book never schedules anything, and the navbar bell polls this endpoint
+// every minute while the user is signed in, so reminders appear without
+// a background job.
 const getNotifications = async (req, res) => {
   try {
     const email = getOwnerEmail(req, res);
     if (!email) return;
+    await checkDueReminders(email);
     const result = await db.notificationsCollection
       .find({ email })
       .sort({ createdAt: -1 })
