@@ -6,8 +6,8 @@ const db = require("../config/db");
 // kind) — no duplicates while one is still unread. When a book goes
 // overdue, its stale due-soon reminder is removed. Reminders for books
 // the user no longer has on loan (returned since the reminder was
-// created) are pruned, so the bell never shows a due reminder for a
-// book that is already back.
+// created) are pruned — read or unread — so the bell never shows a due
+// reminder for a book that is already back.
 //
 // This runs lazily whenever the user's notifications are listed — the
 // navbar bell polls that endpoint every minute while signed in — so no
@@ -51,12 +51,13 @@ const checkDueReminders = async (email) => {
       active.map((borrow) => String(borrow.bookId))
     );
 
-    // Prune: unread due reminders for books the user no longer has on
-    // loan (returned since the reminder was created).
+    // Prune: due reminders for books the user no longer has on loan
+    // (returned since the reminder was created) — read or unread, so a
+    // reminder that was already opened still disappears once the book
+    // is back.
     await db.notificationsCollection.deleteMany({
       email,
       type: { $in: ["due-soon", "overdue"] },
-      read: false,
       bookId: { $nin: [...activeBookIds] },
     });
 
@@ -67,12 +68,12 @@ const checkDueReminders = async (email) => {
       const bookId = borrow.bookId;
       const bookName = borrow.bookName || "A borrowed book";
       if (daysUntilDue < 0) {
-        // Overdue: replace any unread due-soon reminder for this book.
+        // Overdue: replace any due-soon reminder for this book, read or
+        // not — its "due back on" wording is stale now.
         await db.notificationsCollection.deleteMany({
           email,
           type: "due-soon",
           bookId,
-          read: false,
         });
         const existing = await db.notificationsCollection.findOne({
           email,
