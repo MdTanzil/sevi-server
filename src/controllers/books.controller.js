@@ -20,15 +20,40 @@ const getBooksByCategory = async (req, res) => {
   res.send(result);
 };
 
-// get single book
+// get single book. Also reports earliestReturnDate — the soonest
+// return date (YYYY-MM-DD, today or later) among the book's ACTIVE
+// borrows, or null when no copy is out on loan with a future return
+// date. Overdue borrows have no reliable return date, so they are
+// excluded; a book with no active borrows gets null. Borrow records
+// store bookId as a string, so both forms are matched.
 const getSingleBook = async (req, res) => {
-  // console.log('req hit ' + req.params.category);
-  const bookId = req.params.id;
+  try {
+    const bookId = req.params.id;
 
-  const query = { _id: new ObjectId(bookId) };
-  const result = await booksCollection.findOne(query);
+    const query = { _id: new ObjectId(bookId) };
+    const result = await booksCollection.findOne(query);
+    if (!result) {
+      res.send(result);
+      return;
+    }
 
-  res.send(result);
+    const today = new Date().toISOString().slice(0, 10);
+    const earliest = await borrowCollection
+      .find({
+        bookId: { $in: [bookId, new ObjectId(bookId)] },
+        status: { $ne: "returned" },
+        retunDate: { $gte: today },
+      })
+      .sort({ retunDate: 1 })
+      .limit(1)
+      .toArray();
+    result.earliestReturnDate =
+      earliest.length > 0 ? earliest[0].retunDate : null;
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ error: "Could not load this book." });
+  }
 };
 
 // get all book

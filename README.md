@@ -188,6 +188,12 @@ Clears the `token` cookie. Responds with `{ "success": true }`.
   GET /api/v1/single-book/:id
 ```
 
+Returns the book plus `earliestReturnDate` — the soonest return date
+(`YYYY-MM-DD`, today or later) among the book's active borrows, or
+`null` when no copy is out on loan with a future return date. Overdue
+borrows have no reliable return date, so they are excluded. Returns
+`null` for an unknown id.
+
 #### Get all books 🔒
 
 ```http
